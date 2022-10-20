@@ -37,4 +37,22 @@ samtools view -f 0x10 ${BAMF} -o $BAM_R
 
 for $FILE in *.bw; do [command] $FILE ; done
 
+########################################################################################################################################################
+## Adding/Removing "Chr" from BigWig File
+########################################################################################################################################################
+
+# load in file using samtools
+# sed -e 's/SN: [what you have]/ SN: [what you want]/'
+# reheader, write out
+
+samtools view -h pNETseq.unph.forward.merge.bam |sed -e 's/SN:1/SN:Chr1/' | sed -e 's/SN:2/SN:Chr2/' |\
+sed -e 's/SN:3/SN:Chr3/' | sed -e 's/SN:4/SN:Chr4/' |\
+sed -e 's/SN:5/SN:Chr5/' | samtools reheader - pNETseq.unph.forward.merge.bam > pNETseq.unph.forward.merge.chr.bam
+
+
+
+
+
+
+
 
