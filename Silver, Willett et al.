@@ -1,0 +1,245 @@
+########################################################################################################################################################
+## Making an Intergenic Enhancer File
+########################################################################################################################################################
+
+## Create a bed file with +100bp of TSS 
+
+# Load R
+R
+
+# Import gene .gff file
+
+x <- as.data.frame(read.table("/Users/rogerwdeal/Documents/Genomes.and.annotation/Arabidopsis/TAIR/TAIR10_GFF3_genes.gff.txt", sep="\t", header=FALSE))
+
+# Filter for only coding genes
+x.gene <- x[which(x$V3 == "gene"),]
+
+# Separate positive and negative strands
+x.gene.pos <- x.gene[which(x.gene$V7=="+"),]
+x.gene.neg <- x.gene[which(x.gene$V7=="-"),]
+
+# Add 100 bp upstream of TSS
+x.gene.pos$start <- x.gene.pos$V4 - 100
+x.gene.neg$end <- x.gene.neg$V5 + 100
+
+# Reorder columns
+x.gene.pos2 <- x.gene.pos[,c(1,10,5)]
+x.gene.neg2 <- x.gene.neg[,c(1,4,10)]
+
+# Rename columns for rbind
+colnames(x.gene.pos2) <- c("V1","V2","V3")
+colnames(x.gene.neg2) <- c("V1","V2","V3")
+
+# Combine dataframes
+rbind(x.gene.pos2, x.gene.neg2)
+
+write.table(dat, "TSS_100bp_pos_neg2_2.bed", sep="\t", quote=FALSE, col.names=FALSE, row.names=FALSE)
+q()
+
+#---------------------------------------------------------------------------
+## Subtract gene bodies (+100bp) from ATAC-seq data
+# NO overlap
+
+bedtools intersect -a ATAC-seq.bed  -b TSS_100bp_pos_neg2_2.bed -v -o intergenic_enhancer2.bed
+
+########################################################################################################################################################
+## Processing GRO, NET, 5-EU RNA-seq data
+########################################################################################################################################################
+
+# Remove adaptors for pNET-seq
+
+cutadapt -a TGGAATTCTCGGGTGCCAAGG -o YOUR_FILE.trim1.fq --minimum-length 23 YOUR_FILE.fastq.gz
+cutadapt -u 4 -u -4 -o YOUR_FILE.trim2.fq YOUR_FILE.trim1.fq
+
+# Treat trim1 as SE and align per usual pipeline
+
+# Separate forward and reverse strand for all 3 datasets
+
+samtools view -F 0x10 ${BAMF} -bh -o $BAM_F
+samtools view -f 0x10 ${BAMF} -bh -o $BAM_R
+
+########################################################################################################################################################
+## Visualizing in SeqPlots (General Settings)
+########################################################################################################################################################
+
+## Settings
+
+#Resolution: 10 bp
+#Mean
+#Midpoint Features
+#Upstream: 1000 bp
+#Downstream: 1000 bp
+
+## Color Scheme:                 Priority/Order 
+
+#DNase/ATAC-seq: Licorice             9
+#H2A.Z: Maraschino                    4
+#H3: Tangerine                        3
+#H3K4Me3: Blueberry                   5
+#H3K4Me1: Clover                      6
+#H3K27Ac: Steel                       8
+#H3K27Me3: Plum                       7                         
+#GRO-seq (+ strand): Maroon           1
+#GRO-seq (- strand): Salmon           0
+
+## Heatmap Settings
+#k-means clustering
+#log2 transform
+
+## Metaplot Settings
+#Z-score transform
+
+########################################################################################################################################################
+## Calculating Skew of Read Depth Between Plants and Animals
+########################################################################################################################################################
+
+## Create Upstream and Downstream Intergenic Enhancer Bed Files
+
+at <- read.delim("Downloads/intergenic_enhancer2.bed", header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+
+# Calculate midpoint
+# Needs to be a whole number, so make sure to round()
+at$mid <- round((at$V2 + at$V3)/2)
+
+# Make upstream file (Chr, Mid-1000, Mid)
+at_up <- at[c(1,4)]
+at_up$mid_1kb <- at_up$mid - 1000
+at_up2 <- at_up[c(1,3,2)]
+write.table(at_up2, "Downloads/"At_intergenic_enh_upstream_1kb.bed", sep="\t", quote=FALSE, col.names=FALSE, row.names=FALSE)
+
+# Make downstream file (Chr, Mid, Mid+1000)
+at_down <- at[c(1,4)]
+at_down$mid_1kb <- at_down$mid +1000
+write.table(at_down, "Downloads/At_intergenic_enh_downstream_1kb.bed", sep="\t", quote=FALSE, col.names=FALSE, row.names=FALSE)
+
+## Check for negative values
+up <- read.table("At_intergenic_enh_upstream_1kb.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+down <- read.table("At_intergenic_enh_downstream_1kb.bed",header = FALSE, sep="\t",stringsAsFactors=FALSE, quote="")
+
+up2 <- up[which(up$V2 < 0),]
+down2 <- down[which(down$V3 < 0),]
+
+## Add fourth column with identifier
+up2$V4 <- paste(up2$V1, ":", up2$V3, sep="")
+down2$V4 <- paste(down2$V1, ":", down2$V2, sep="")
+
+#---------------------------------------------------------------------------
+## BigWigAverageOverBed
+#---------------------------------------------------------------------------
+
+
+for FILE in *.bw; do bigWigAverageOverBed $FILE intergenic.enhancer_down.round.bed $FILE.intergenic_enhancer.down.tab; done
+for FILE in *.bw; do bigWigAverageOverBed $FILE intergenic.enhancer_upstream.round.2.bed $FILE.intergenic_enhancer.up.tab; done 
+
+#---------------------------------------------------------------------------
+
+# Example using K27ac
+R
+
+bwdown <- read.table("NH_K27ac.sort.q2_intergenic.enhancer_downstream.tab",sep="\t")
+bwup <-read.table("NH_K27ac.sort.q2_intergenic.enhancer_upstream.tab",sep="\t")
+
+# Separate V1 to get mid
+bwdown <- bwdown %>% separate(V1, c("CHR","Mid"))
+bwup <- bwup %>% separate(V1, c("CHR","Mid") )
+
+#Make numeric
+bwdown[,2] <- sapply(bwdown[,2],as.numeric)
+bwup[,2] <- sapply(bwup[,2], as.numeric)
+
+#Reorder
+bwup<- bwup[order(bwup$CHR,bwup$Mid),]
+bwdown <- bwdown[order(bwdown$CHR, bwdown$Mid),]
+
+# Merge up and down
+bwmerge <- merge(bwdown, bwup, by="Mid")
+
+# Trim extra columns and rename
+bwmerge2 <- bwmerge[c(1:2,8:11,16:17)]
+colnames(bwmerge2) <- c("Mid","Chr-down", "Mean-down", "Mean-up")
+
+#Calculate Absolute Value of Skew
+bwmerge2$skew <- paste(abs(bwmerge2$`Mean-up` - bwmerge2$`Mean-down`))
+write.table(bwmerge2, "K27ac.intergenic_enhancer.merge.cluster.bed",quote=FALSE,row.names = FALSE,col.names = TRUE)
+
+#---------------------------------------------------------------------------
+
+# Repeat this for each dataset and then merge using rbind
+# Make sure to include a column in each dataset with an identifier (i.e. K27ac)
+
+# Make a master file with human, arabidopsis, drosophila
+
+chip <- read.delim("~/Desktop/Figures/Bed Files/Skew/All_chip-only_skew.bed",sep="\t")
+gro <- read.delim("~/Desktop/Figures/Bed Files/Skew/All_gro-only_skew.bed",sep="\t")
+
+
+#----------------------------------------------------------------------
+## Graph  and Analyze Skew
+#----------------------------------------------------------------------------
+
+# Transform skew (log2 + 1)
+gro$skewlog2 <- log2(gro$Skew + 1)
+
+# Function to get summary stats
+gro %>%
+  group_by(species) %>%
+  summarise(
+    count = n(),
+    mean = mean(skewlog2),
+    median = median(skewlog2),
+    sd = sd(skewlog2)
+  )
+
+#----------------------------------------------------------------------------
+
+## Wilcoxon Rank Sum Test
+#Arabidopsis vs. Human
+at_human <- gro[which(gro$species=="Arabidopsis" | gro$species=="Human"),]
+
+res <- wilcox.test(skewlog2 ~ species, data = at_human)
+
+#Arabidopsis vs. Fly
+at_fly <- gro[which(gro$species=="Arabidopsis" | gro$species=="Drosophila"),]
+
+res <- wilcox.test(skewlog2 ~ species, data = at_fly)
+
+#----------------------------------------------------------------------------
+## Visulaize Data
+#----------------------------------------------------------------------------
+
+library(ggplot2)
+library(ggsignif)
+
+# Function to get mean +/- SD in graph
+data_summary <- function(x) {
+  m <- mean(x)
+  ymin <- m-sd(x)
+  ymax <- m+sd(x)
+  return(c(y=m,ymin=ymin,ymax=ymax))
+}
+
+# Re-label X axis
+xlabs <- c("A.thaliana", "D. melanogaster", "H. sapiens")
+
+# Violin Plot
+
+ggplot(gro, aes(x=species, y=skewlog2, color=species)) + geom_violin() +
+  # Add Mean +/- SD function
+  stat_summary(fun.data=data_summary) +
+  # Edit title and legend
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5,face="bold"),axis.text.x = element_text(face="italic") ) +
+  labs(title="Skew of GRO-seq data Over Intergenic Enhancer Regions",
+       x="Species", y="Skew (log2+1)") +
+  # Put in our x labels
+  scale_x_discrete(labels=xlabs) +
+  # Denote significance from Wilcoxon Rank Sum Test
+  geom_signif(
+    comparisons=list(c("Arabidopsis", "Drosophila")),map_signif_level = TRUE, y_position = 23, test="wilcox.test", color="black") +
+  geom_signif(
+    comparisons=list(c("Arabidopsis","Human")), map_signif_level = TRUE, y_position = 25,test="wilcox.test", color="black")
+
+
+
+
+
+
