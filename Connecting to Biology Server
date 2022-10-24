@@ -1,0 +1,32 @@
+#---------------------------------------------------
+# Log In to Server
+#---------------------------------------------------
+
+# Open terminal
+
+ssh rdeal3@bio.emory.edu
+
+# Password: megabasestealers
+
+#---------------------------------------------------
+# Submit a Python Script
+#---------------------------------------------------
+
+# Write a script as follows (including hashes):
+
+#!/opt/anaconda/bin/python
+script.py
+
+#-------------
+
+# Submit the script
+sbatch script
+
+#---------------------------------------------------
+# Submit a Bash Script
+#---------------------------------------------------
+
+#!/bin/bash
+....
+
+sbatch script.sbatch
