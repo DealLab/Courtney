@@ -49,6 +49,11 @@ samtools view -h pNETseq.unph.forward.merge.bam |sed -e 's/SN:1/SN:Chr1/' | sed 
 sed -e 's/SN:3/SN:Chr3/' | sed -e 's/SN:4/SN:Chr4/' |\
 sed -e 's/SN:5/SN:Chr5/' | samtools reheader - pNETseq.unph.forward.merge.bam > pNETseq.unph.forward.merge.chr.bam
 
+########################################################################################################################################################
+## Change File Extensions in Batch via Terminal
+########################################################################################################################################################
+
+for file in *.bed; do mv "$file" "${file%.bed}.tab"; done
 
 
 
